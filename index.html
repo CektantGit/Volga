@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>ВОЛГА 2026</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎣</text></svg>">
+  <script>
+    // Открыли index.html двойным кликом (file://) — модули так не работают.
+    if (location.protocol === 'file:') {
+      addEventListener('DOMContentLoaded', () => {
+        document.body.innerHTML = '<div style="display:grid;place-items:center;height:100vh;text-align:center;font-family:system-ui">' +
+          '<div><h1>🎣 ВОЛГА 2026</h1><p>Так игра не запустится.<br>Запусти файл <b>ИГРАТЬ.bat</b> в папке игры<br>или в терминале: <code>npm run dev</code></p></div></div>';
+      });
+    }
+  </script>
+  <!-- Запасной резолв "three" для запуска без Vite (Live Server и т.п.) -->
+
+  <style>
+    :root {
+      --bg: #f4efe4;
+      --panel: rgba(252, 250, 243, 0.94);
+      --ink: #3a4148;
+      --muted: #8a8f96;
+      --accent: #4f8fbf;
+      --accent2: #d97f5a;
+      --good: #7fbf78;
+      --bad: #d96a5a;
+      --booze: #c9a0d9;
+      --radius: 14px;
+      --shadow: 0 6px 24px rgba(60, 70, 80, 0.18);
+      font-size: 16px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg); color: var(--ink);
+      touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+    /* ---------- HUD ---------- */
+    #hud {
+      position: fixed; top: max(10px, env(safe-area-inset-top)); left: 12px;
+      display: flex; flex-direction: column; gap: 5px; z-index: 5; pointer-events: none;
+      width: min(230px, 46vw);
+    }
+    .bar { background: var(--panel); border-radius: 10px; padding: 3px 8px 5px;
+      box-shadow: 0 2px 8px rgba(60,70,80,.12); }
+    .bar label { font-size: .62rem; font-weight: 700; letter-spacing: .06em;
+      color: var(--muted); text-transform: uppercase; display: flex; justify-content: space-between; }
+    .bar .track { height: 7px; border-radius: 4px; background: #e4dfd2; overflow: hidden; margin-top: 2px; }
+    .bar .fill { height: 100%; border-radius: 4px; transition: width .3s; }
+    #hp .fill { background: var(--bad); } #food .fill { background: var(--accent2); }
+    #energy .fill { background: var(--accent); } #alco .fill { background: var(--booze); }
+
+    #clock {
+      position: fixed; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+      background: var(--panel); padding: 6px 16px; border-radius: 999px; z-index: 5;
+      font-weight: 700; font-size: .85rem; box-shadow: 0 2px 8px rgba(60,70,80,.12);
+      display: flex; gap: 10px; align-items: center; white-space: nowrap;
+    }
+    #clock .moon { opacity: .6; }
+
+    #toast-wrap { position: fixed; top: 22vh; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; gap: 6px; align-items: center; z-index: 40; pointer-events: none; width: max-content; max-width: 90vw; }
+    .toast { background: var(--panel); color: var(--ink); padding: 8px 18px; border-radius: 999px;
+      box-shadow: var(--shadow); font-weight: 600; font-size: .9rem; animation: toast 3s forwards; text-align: center; }
+    .toast.bad { color: var(--bad); } .toast.good { color: #4f8f4a; }
+    @keyframes toast { 0% { opacity: 0; transform: translateY(-8px); } 10%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+    #prompt {
+      position: fixed; bottom: 24vh; left: 50%; transform: translateX(-50%);
+      background: var(--panel); padding: 8px 18px; border-radius: 999px; z-index: 5;
+      box-shadow: var(--shadow); font-weight: 600; font-size: .9rem; display: none; pointer-events: none;
+      white-space: nowrap;
+    }
+    #prompt b { color: var(--accent); }
+
+    /* ---------- Кнопки-иконки ---------- */
+    #topbtns { position: fixed; top: max(10px, env(safe-area-inset-top)); right: 12px;
+      display: flex; gap: 8px; z-index: 6; }
+    .iconbtn {
+      width: 46px; height: 46px; border-radius: 12px; border: none; cursor: pointer;
+      background: var(--panel); box-shadow: 0 2px 8px rgba(60,70,80,.15);
+      font-size: 1.25rem; display: grid; place-items: center; color: var(--ink);
+    }
+    .iconbtn:active { transform: scale(.93); }
+
+    /* ---------- Панели ---------- */
+    .panel {
+      position: fixed; inset: 0; z-index: 20; display: none;
+      background: rgba(40, 50, 60, 0.35); backdrop-filter: blur(3px);
+      align-items: center; justify-content: center; padding: 12px;
+    }
+    .panel.open { display: flex; }
+    .panel-card {
+      background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
+      width: min(640px, 96vw); max-height: min(80vh, 640px); overflow: auto; padding: 18px;
+    }
+    .panel-card h2 { font-size: 1.1rem; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .panel-card h2 .x { cursor: pointer; border: none; background: #e8e2d4; width: 34px; height: 34px;
+      border-radius: 10px; font-size: 1rem; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+    .slot {
+      background: #f2ecdd; border-radius: 10px; padding: 7px 5px; text-align: center; cursor: pointer;
+      border: 2px solid transparent; position: relative; min-height: 70px;
+      display: flex; flex-direction: column; justify-content: center; gap: 2px;
+    }
+    .slot:active { transform: scale(.95); }
+    .slot.eq { border-color: var(--accent); }
+    .slot .ico { font-size: 1.5rem; line-height: 1; }
+    .slot .nm { font-size: .58rem; font-weight: 600; color: var(--ink); line-height: 1.1; }
+    .slot .ct { position: absolute; top: 3px; right: 6px; font-size: .7rem; font-weight: 800; color: var(--accent2); }
+
+    .recipes { display: flex; flex-direction: column; gap: 8px; }
+    .recipe { background: #f2ecdd; border-radius: 10px; padding: 10px 12px; display: flex;
+      align-items: center; gap: 10px; justify-content: space-between; }
+    .recipe.off { opacity: .45; }
+    .recipe .rname { font-weight: 700; font-size: .9rem; }
+    .recipe .rin { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+    .recipe button {
+      border: none; background: var(--accent); color: #fff; font-weight: 700; padding: 8px 16px;
+      border-radius: 9px; cursor: pointer; font-size: .85rem; flex-shrink: 0;
+    }
+    .recipe.off button { background: #c5c0b4; }
+
+    /* ---------- Мудлы (иконки состояний, столбиком справа как в PZ) ---------- */
+    #moodles {
+      position: fixed; right: 12px; top: calc(max(10px, env(safe-area-inset-top)) + 58px);
+      display: flex; flex-direction: column; gap: 4px; align-items: flex-end;
+      pointer-events: none; z-index: 6;
+    }
+    .moodle {
+      background: var(--panel); border-radius: 9px; padding: 3px 7px; font-size: .78rem;
+      box-shadow: 0 2px 6px rgba(60,70,80,.12); display: flex; align-items: center; gap: 4px;
+    }
+    .moodle small { font-size: .58rem; font-weight: 700; color: var(--muted); }
+
+    /* ---------- Кнопки скорости времени ---------- */
+    #timebtns { display: flex; gap: 3px; margin-left: 4px; }
+    #timebtns button {
+      border: none; background: #e8e2d4; border-radius: 7px; width: 26px; height: 24px;
+      font-size: .68rem; font-weight: 800; cursor: pointer; color: var(--muted); padding: 0;
+    }
+    #timebtns button.on { background: var(--accent); color: #fff; }
+
+    /* ---------- Док-панель (PZ-стиль): инвентарь + «Рядом» ---------- */
+    #dock {
+      position: fixed; right: 10px; z-index: 9;
+      top: calc(max(10px, env(safe-area-inset-top)) + 58px);
+      bottom: max(88px, calc(env(safe-area-inset-bottom) + 84px));
+      width: min(300px, 86vw);
+      display: flex; flex-direction: column; gap: 8px;
+      transition: transform .2s, opacity .2s;
+    }
+    body:not(.dock-open) #dock { transform: translateX(110%); opacity: 0; pointer-events: none; }
+    .dock-sec {
+      background: rgba(252, 250, 243, 0.92); border-radius: 14px; padding: 10px;
+      box-shadow: var(--shadow); display: flex; flex-direction: column; min-height: 90px; flex: 1;
+      overflow: hidden; backdrop-filter: blur(3px);
+    }
+    .dock-sec .grid { overflow-y: auto; flex: 1; align-content: start;
+      grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); }
+    .dock-sec .slot { min-height: 60px; }
+    .boxhead { display: flex; justify-content: space-between; align-items: center;
+      font-size: .72rem; font-weight: 800; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .04em; margin-bottom: 8px; gap: 6px; }
+    .boxhead button { border: none; background: var(--accent); color: #fff; font-weight: 700;
+      padding: 5px 10px; border-radius: 8px; cursor: pointer; font-size: .72rem; flex-shrink: 0; }
+    .boxhint { text-transform: none; letter-spacing: 0; font-weight: 600; }
+    #dock-loot-sel {
+      border: none; background: #e8e2d4; border-radius: 8px; padding: 5px 8px; font-size: .78rem;
+      font-weight: 700; color: var(--ink); font-family: inherit; max-width: 60%; min-width: 0;
+    }
+    #dock-extra { margin-top: 8px; }
+    #dock-extra .mainbtn { padding: 8px 14px; font-size: .82rem; width: 100%; }
+    .boxempty { grid-column: 1/-1; color: var(--muted); text-align: center; padding: 14px 4px; font-size: .82rem; }
+    body.touch #dock { bottom: max(180px, calc(env(safe-area-inset-bottom) + 168px)); }
+    @media (max-width: 640px) {
+      #moodles { top: calc(max(10px, env(safe-area-inset-top)) + 100px); }
+      #dock { top: calc(max(10px, env(safe-area-inset-top)) + 100px); }
+    }
+
+    /* ---------- Контекстное меню предмета ---------- */
+    #ctx {
+      position: fixed; z-index: 30; display: none; flex-direction: column; min-width: 170px;
+      background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); padding: 6px;
+    }
+    #ctx .ctx-title { font-size: .78rem; font-weight: 800; padding: 6px 10px; color: var(--muted);
+      border-bottom: 1px dashed #ddd6c6; margin-bottom: 4px; }
+    #ctx button {
+      border: none; background: transparent; text-align: left; padding: 9px 10px; border-radius: 8px;
+      cursor: pointer; font-size: .88rem; font-weight: 600; color: var(--ink); font-family: inherit;
+    }
+    #ctx button:hover, #ctx button:active { background: #e8f0f7; }
+    #ctx button.danger { color: var(--bad); }
+
+    /* ---------- Хотбар ---------- */
+    #hotbar {
+      position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%;
+      transform: translateX(-50%); z-index: 7; display: flex; gap: 6px;
+      background: rgba(252, 250, 243, 0.75); padding: 6px; border-radius: 14px;
+      backdrop-filter: blur(3px); box-shadow: 0 4px 16px rgba(60,70,80,.14);
+      max-width: 96vw;
+    }
+    .hslot {
+      width: 52px; height: 52px; border-radius: 10px; background: #f2ecdd;
+      border: 2px solid transparent; cursor: pointer; position: relative;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .hslot:active { transform: scale(.92); }
+    .hslot.eq { border-color: var(--accent); background: #dcecf5; }
+    .hslot .ico { font-size: 1.35rem; line-height: 1.1; }
+    .hslot .ct { position: absolute; bottom: 1px; right: 4px; font-size: .62rem; font-weight: 800; color: var(--accent2); }
+    .hslot .nm { font-size: .43rem; font-weight: 700; color: var(--muted); max-width: 50px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hslot.more { background: transparent; border: 2px dashed #cfc8b8; color: var(--muted);
+      font-weight: 800; font-size: .8rem; }
+    .hslot.pop { animation: hpop .3s; }
+    @keyframes hpop { 0% { transform: scale(1.25); } 100% { transform: scale(1); } }
+    body.touch #hotbar { bottom: max(120px, calc(env(safe-area-inset-bottom) + 104px)); padding: 4px; }
+    body.touch .hslot { width: 46px; height: 46px; }
+
+    /* ---------- Мобильное управление ---------- */
+    #joy {
+      position: fixed; left: 20px; bottom: max(20px, env(safe-area-inset-bottom)); z-index: 8;
+      width: 128px; height: 128px; border-radius: 50%;
+      background: rgba(252, 250, 243, 0.4); backdrop-filter: blur(2px);
+      display: none; touch-action: none;
+    }
+    #joy .stick {
+      position: absolute; width: 56px; height: 56px; border-radius: 50%;
+      background: var(--panel); box-shadow: 0 2px 10px rgba(60,70,80,.25);
+      left: 36px; top: 36px;
+    }
+    #actbtns { position: fixed; right: 16px; bottom: max(24px, env(safe-area-inset-bottom)); z-index: 8;
+      display: none; flex-direction: column; gap: 12px; align-items: flex-end; }
+    .bigbtn {
+      width: 74px; height: 74px; border-radius: 50%; border: none;
+      background: var(--panel); box-shadow: var(--shadow); font-size: 1.7rem; cursor: pointer;
+      display: grid; place-items: center;
+    }
+    .bigbtn:active { transform: scale(.92); }
+    .bigbtn small { font-size: .55rem; font-weight: 700; color: var(--muted); display: block; }
+    body.touch #joy, body.touch #actbtns { display: flex; }
+    body.touch #joy { display: block; }
+
+    /* ---------- Экраны ---------- */
+    #screen {
+      position: fixed; inset: 0; z-index: 50; background: linear-gradient(160deg, #cfe8f2, #f4efe4 70%);
+      display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+      padding: 16px;
+    }
+    #screen h1 { font-size: clamp(2.4rem, 9vw, 4.5rem); letter-spacing: .12em; color: #35586e;
+      text-shadow: 0 3px 0 rgba(255,255,255,.7); }
+    #screen .sub { color: var(--muted); font-weight: 600; margin-top: -8px; text-align: center; }
+    .mainbtn {
+      border: none; background: var(--accent); color: #fff; font-size: 1.1rem; font-weight: 800;
+      padding: 14px 44px; border-radius: 14px; cursor: pointer; box-shadow: var(--shadow);
+    }
+    .mainbtn.alt { background: #a8b2ba; }
+    .mainbtn:active { transform: scale(.96); }
+
+    /* Редактор персонажа */
+    #editor { display: none; position: fixed; inset: 0; z-index: 49;
+      background: linear-gradient(160deg, #cfe8f2, #f4efe4 70%); overflow: auto; }
+    #editor .wrap { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px;
+      padding: 20px 14px calc(20px + env(safe-area-inset-bottom)); max-width: 860px; margin: 0 auto; }
+    #editor h1 { width: 100%; text-align: center; color: #35586e; font-size: 1.5rem; letter-spacing: .08em; }
+    #edview { width: min(300px, 88vw); height: 340px; border-radius: var(--radius);
+      background: rgba(255,255,255,.55); box-shadow: var(--shadow); }
+    #edopts { display: flex; flex-direction: column; gap: 10px; width: min(380px, 92vw); }
+    .edrow { background: var(--panel); border-radius: 12px; padding: 10px 12px; }
+    .edrow label { font-size: .7rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .edrow .opts { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .edrow .opt { border: 2px solid transparent; background: #eee8da; border-radius: 9px;
+      padding: 7px 12px; cursor: pointer; font-size: .8rem; font-weight: 600; color: var(--ink); }
+    .edrow .opt.sel { border-color: var(--accent); background: #dcecf5; }
+    .edrow .swatch { width: 34px; height: 34px; border-radius: 9px; padding: 0; }
+    #edname { width: 100%; border: none; background: #eee8da; border-radius: 9px; padding: 9px 12px;
+      font-size: .95rem; font-weight: 700; color: var(--ink); margin-top: 6px; font-family: inherit; }
+
+    /* Затемнение ночью + эффекты */
+    #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 4;
+      box-shadow: inset 0 0 18vmax rgba(10, 15, 40, 0); transition: box-shadow 1s; }
+    #flash { position: fixed; inset: 0; pointer-events: none; z-index: 4; background: #d96a5a; opacity: 0; }
+    #flash.hit { animation: flash .4s; }
+    @keyframes flash { 0% { opacity: .45; } 100% { opacity: 0; } }
+
+    /* Рыбалка */
+    #fishing { position: fixed; left: 50%; bottom: 30vh; transform: translateX(-50%);
+      z-index: 15; display: none; flex-direction: column; align-items: center; gap: 8px; }
+    #fishbar { width: min(300px, 80vw); height: 22px; background: var(--panel); border-radius: 999px;
+      box-shadow: var(--shadow); position: relative; overflow: hidden; }
+    #fishzone { position: absolute; top: 0; bottom: 0; background: var(--good); opacity: .75; }
+    #fishcur { position: absolute; top: 2px; bottom: 2px; width: 5px; background: var(--ink); border-radius: 3px; }
+    #fishing .hint { background: var(--panel); border-radius: 999px; padding: 5px 14px;
+      font-size: .8rem; font-weight: 700; box-shadow: var(--shadow); }
+
+    #sleep-fade { position: fixed; inset: 0; background: #0a0e1a; opacity: 0; pointer-events: none;
+      transition: opacity 1.2s; z-index: 45; }
+
+    .statline { display: flex; justify-content: space-between; padding: 6px 2px; font-size: .9rem;
+      border-bottom: 1px dashed #ddd6c6; }
+    .hidden { display: none !important; }
+
+    /* Узкие экраны: часы уводим под кнопки справа, чтобы не наезжали на HUD */
+    @media (max-width: 640px) {
+      #clock {
+        left: auto; right: 12px; transform: none;
+        top: calc(max(10px, env(safe-area-inset-top)) + 56px);
+        font-size: .75rem; padding: 5px 12px;
+      }
+      #hud { width: min(190px, 48vw); }
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js" } }
+  </script>
+  <script type="module" crossorigin src="./assets/index-Bqiq4yK1.js"></script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="vignette"></div>
+  <div id="flash"></div>
+  <div id="sleep-fade"></div>
+
+  <div id="hud" class="hidden">
+    <div class="bar" id="hp"><label><span>❤️ Здоровье</span><span class="v"></span></label><div class="track"><div class="fill"></div></div></div>
+    <div class="bar" id="food"><label><span>🍖 Сытость</span><span class="v"></span></label><div class="track"><div class="fill"></div></div></div>
+    <div class="bar" id="energy"><label><span>⚡ Энергия</span><span class="v"></span></label><div class="track"><div class="fill"></div></div></div>
+    <div class="bar" id="alco"><label><span>🍺 Опьянение</span><span class="v"></span></label><div class="track"><div class="fill"></div></div></div>
+  </div>
+
+  <div id="moodles" class="hidden"></div>
+
+  <div id="clock" class="hidden">
+    <span id="daylabel">День 1</span><span id="timelabel">☀️ 08:00</span>
+    <span id="timebtns"><button data-s="0">⏸</button><button data-s="1" class="on">▶</button><button data-s="2">2×</button><button data-s="4">4×</button></span>
+  </div>
+
+  <div id="topbtns" class="hidden">
+    <button class="iconbtn" id="btn-inv" title="Инвентарь (I)">🎒</button>
+    <button class="iconbtn" id="btn-craft" title="Крафт (C)">🔨</button>
+    <button class="iconbtn" id="btn-menu" title="Меню (Esc)">☰</button>
+  </div>
+
+  <div id="prompt"></div>
+  <div id="toast-wrap"></div>
+
+  <div id="fishing">
+    <div id="fishbar"><div id="fishzone"></div><div id="fishcur"></div></div>
+    <div class="hint">Жми в зелёной зоне! <b>[ПРОБЕЛ / тап]</b></div>
+  </div>
+
+  <div id="hotbar" class="hidden"></div>
+
+  <div id="joy"><div class="stick"></div></div>
+  <div id="actbtns">
+    <button class="bigbtn" id="mob-act">✋</button>
+    <button class="bigbtn" id="mob-atk">⚔️</button>
+  </div>
+
+  <!-- Докнутая панель в стиле Project Zomboid: инвентарь + «Рядом» -->
+  <div id="dock" class="hidden">
+    <div class="dock-sec">
+      <div class="boxhead"><span>🎒 Инвентарь</span><span class="boxhint">клик — меню</span></div>
+      <div class="grid" id="dock-inv-grid"></div>
+    </div>
+    <div class="dock-sec">
+      <div class="boxhead">
+        <select id="dock-loot-sel"></select>
+        <button id="dock-takeall">Взять всё</button>
+      </div>
+      <div class="grid" id="dock-loot-grid"></div>
+      <div id="dock-extra"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-craft"><div class="panel-card">
+    <h2 id="craft-title">🔨 Крафт <button class="x">✕</button></h2>
+    <div class="recipes" id="craft-list"></div>
+  </div></div>
+
+  <div id="ctx"></div>
+
+  <div class="panel" id="panel-menu"><div class="panel-card">
+    <h2>☰ Меню <button class="x">✕</button></h2>
+    <div id="menu-stats"></div>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+      <button class="mainbtn" id="menu-continue">Продолжить</button>
+      <button class="mainbtn alt" id="menu-save">Сохранить</button>
+      <button class="mainbtn alt" id="menu-reset">Новая игра</button>
+    </div>
+  </div></div>
+
+  <div id="editor">
+    <div class="wrap">
+      <h1>СОЗДАЙ РЫБАКА</h1>
+      <canvas id="edview"></canvas>
+      <div id="edopts"></div>
+      <button class="mainbtn" id="ed-done" style="width:min(380px,92vw)">НА БЕРЕГ! 🎣</button>
+    </div>
+  </div>
+
+  <div id="screen">
+    <h1>ВОЛГА 2026</h1>
+    <div class="sub">Выживание на великой реке.<br>Руби, лови, крафть, бухай — и доживи до утра.</div>
+    <button class="mainbtn" id="btn-new">Новая игра</button>
+    <button class="mainbtn alt hidden" id="btn-continue">Продолжить</button>
+    <div class="sub" id="controls-hint" style="font-size:.75rem">
+      🖥️ WASD — ходьба · E — действие · Пробел — атака · I — инвентарь · C — крафт<br>
+      📱 джойстик слева · кнопки справа
+    </div>
+  </div>
+
+</body>
+</html>
